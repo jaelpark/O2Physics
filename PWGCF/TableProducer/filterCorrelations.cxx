@@ -21,6 +21,10 @@
 #include "Common/DataModel/TrackSelectionTables.h"
 #include "Common/DataModel/Centrality.h"
 
+#include "PWGHF/Core/HfHelper.h"
+#include "PWGHF/DataModel/CandidateReconstructionTables.h"
+#include "PWGHF/DataModel/CandidateSelectionTables.h"
+
 #include <TH3F.h>
 #include <TDatabasePDG.h>
 
@@ -41,6 +45,13 @@ DECLARE_SOA_COLUMN(Multiplicity, multiplicity, float); //! Centrality/multiplici
 DECLARE_SOA_TABLE(CFMultiplicities, "AOD", "CFMULTIPLICITY", cfmultiplicity::Multiplicity); //! Transient multiplicity table
 
 using CFMultiplicity = CFMultiplicities::iterator;
+
+DECLARE_SOA_TABLE(CF2ProngColls, "AOD", "CF2PRONGCOLL", //! Transient collision index table
+                  o2::soa::Index<>, bc::RunNumber);     // FIXME does not compile without at least one additional column (RunNumber for example)
+
+DECLARE_SOA_TABLE(CFTransientTracks, "AOD", "CFTRTRACK",     //! Transient track table
+                  o2::soa::Index<>, cftrack::CFCollisionId); // FIXME - CFCollisionId unnecessary
+
 } // namespace o2::aod
 
 struct FilterCF {
@@ -77,6 +88,10 @@ struct FilterCF {
 
   Produces<aod::CFMcCollisions> outputMcCollisions;
   Produces<aod::CFMcParticles> outputMcParticles;
+
+  Produces<aod::CF2ProngColls> output2ProngColls; // used mainly to match the id to CFCollision
+  Produces<aod::CFTransientTracks> outputTransientTracks;
+  Produces<aod::CF2ProngTracks> output2ProngTracks;
 
   template <typename TCollision>
   bool keepCollision(TCollision& collision)
@@ -236,6 +251,53 @@ struct FilterCF {
     delete[] mcParticleLabels;
   }
   PROCESS_SWITCH(FilterCF, processMC, "Process MC", false);
+
+  using HFCandidates = soa::Join<aod::HfCand2Prong, aod::HfSelD0>;
+  using HFProngIndexType = std::result_of<decltype (&HFCandidates::iterator::prong0Id)(HFCandidates::iterator)>::type;
+  using CFTrackIndexType = std::result_of<decltype (&Produces<aod::CFTransientTracks>::lastIndex)(Produces<aod::CFTransientTracks>)>::type;
+  void processData2Prong(soa::Filtered<soa::Join<aod::Collisions, aod::EvSels, aod::CFMultiplicities>>::iterator const& collision, soa::Filtered<soa::Join<aod::Tracks, aod::TrackSelection>> const& tracks, HFCandidates const& candidates)
+  {
+    if (cfgVerbosity > 0) {
+      LOGF(info, "processData2Prong: Candidates for collision: %u", candidates.size());
+    }
+
+    if (!keepCollision(collision)) {
+      return;
+    }
+
+    auto bc = collision.bc_as<aod::BCsWithTimestamps>();
+    output2ProngColls(bc.runNumber()); // output transient table - the indices should match CFCollision indices
+
+    static std::map<HFProngIndexType, CFTrackIndexType> prongTrackMap[2];
+    prongTrackMap[0].clear();
+    prongTrackMap[1].clear();
+
+    for (auto& track : tracks) {
+      outputTransientTracks(output2ProngColls.lastIndex()); // output transient tablet to obtain the prong track indices
+      const auto& trackIndex = outputTransientTracks.lastIndex();
+      for (auto& c : candidates)
+        if (c.prong0Id() == track.index()) {
+          prongTrackMap[0][c.prong0Id()] = trackIndex;
+          break;
+        }
+      for (auto& c : candidates)
+        if (c.prong1Id() == track.index()) {
+          prongTrackMap[1][c.prong1Id()] = trackIndex;
+          break;
+        }
+    }
+
+    for (auto& c : candidates) {
+      if ((c.hfflag() & 1 << aod::hf_cand_2prong::DecayType::D0ToPiK) == 0) // TODO <--- make configurable
+        continue;
+      const auto& m0 = prongTrackMap[0].find(c.prong0Id());
+      const auto& m1 = prongTrackMap[1].find(c.prong1Id());
+      output2ProngTracks(output2ProngColls.lastIndex(),
+                         m0 != prongTrackMap[0].end() ? (*m0).second : ~CFTrackIndexType(0),
+                         m1 != prongTrackMap[1].end() ? (*m1).second : ~CFTrackIndexType(0), c.pt(), c.eta(), c.phi(), 0u); // TODO make the mask for selections
+    }
+  }
+  PROCESS_SWITCH(FilterCF, processData2Prong, "Process 2prong data", false);
 };
 
 struct MultiplicitySelector {
