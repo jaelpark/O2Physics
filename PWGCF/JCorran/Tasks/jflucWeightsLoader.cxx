@@ -73,6 +73,9 @@ struct jflucWeightsLoader {
     }
   }
 
+  // template <class T>
+  // using hasDecay = decltype(std::declval<T&>().decay());
+
   template <class CollisionT, class TrackT>
   void loadWeights(CollisionT const& collision, TrackT const& tracks)
   {
@@ -90,6 +93,10 @@ struct jflucWeightsLoader {
     for (auto& track : tracks) {
       float phiWeight, effWeight;
       if (ph) {
+        // TODO: support for particle species dimension
+        /*if constexpr (std::experimental::is_detected<hasDecay, typename TrackT::iterator>::value) {
+      //dim = 1;
+    }*/
         const Double_t coords[] = {collision.multiplicity(), track.phi(), track.eta(), collision.posZ()};
         phiWeight = ph->GetBinContent(ph->GetBin(coords));
       } else {
@@ -113,6 +120,12 @@ struct jflucWeightsLoader {
     loadWeights(collision, tracks);
   }
   PROCESS_SWITCH(jflucWeightsLoader, processLoadWeightsCF, "Load weights histograms for CF derived data table", true);
+
+  /*void processLoadWeightsCF2Prong(aod::CFCollision const& collision, aod::CF2ProngTracks const& tracks2p)
+  {
+    loadWeights(collision, tracks2p);
+  }
+  PROCESS_SWITCH(jflucWeightsLoader, processLoadWeightsCF2Prong, "Load weights histograms for CF derived 2-prong tracks data table", false);*/
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)

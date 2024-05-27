@@ -42,7 +42,10 @@ using namespace o2::framework::expressions;
 struct jflucAnalysisTask {
   ~jflucAnalysisTask()
   {
-    delete pcf;
+    if (pcf)
+      delete pcf;
+    if (pcf2Prong)
+      delete pcf2Prong;
   }
 
   O2_DEFINE_CONFIGURABLE(etamin, float, 0.4, "Minimal eta for tracks");
@@ -54,15 +57,25 @@ struct jflucAnalysisTask {
 
   Filter jtrackFilter = (aod::jtrack::pt > ptmin) && (aod::jtrack::pt < ptmax);    // eta cuts done by jfluc
   Filter cftrackFilter = (aod::cftrack::pt > ptmin) && (aod::cftrack::pt < ptmax); // eta cuts done by jfluc
+  Filter cf2pFilter = (aod::cf2prongtrack::pt > ptmin) && (aod::jtrack::pt < ptmax);
 
   HistogramRegistry registry{"registry"};
 
   void init(InitContext const&)
   {
     auto a = AxisSpec(axisMultiplicity);
-    pcf = new JFFlucAnalysisO2Hist(registry, a);
-    pcf->AddFlags(JFFlucAnalysis::kFlucEbEWeighting);
-    pcf->UserCreateOutputObjects();
+    if (doprocessJDerived || doprocessJDerivedCorrected || doprocessCFDerived || doprocessCFDerivedCorrected) {
+      pcf = new JFFlucAnalysisO2Hist(registry, a, "jfluc");
+      pcf->AddFlags(JFFlucAnalysis::kFlucEbEWeighting);
+      pcf->UserCreateOutputObjects();
+    } else
+      pcf = 0;
+    if (doprocessCF2ProngDerived) {
+      pcf2Prong = new JFFlucAnalysisO2Hist(registry, a, "jfluc2prong"); //<--- TODO: constructor, accept phietaz histogram from the other
+      pcf2Prong->AddFlags(JFFlucAnalysis::kFlucEbEWeighting);
+      pcf2Prong->UserCreateOutputObjects();
+    } else
+      pcf2Prong = 0;
   }
 
   template <class CollisionT, class TrackT>
@@ -70,13 +83,24 @@ struct jflucAnalysisTask {
   {
     pcf->Init();
     pcf->SetEventCentrality(collision.multiplicity());
-    const double fVertex[3] = {0.0f, 0.0f, collision.posZ()}; // TODO: check if posX/Y is really needed
-    pcf->SetEventVertex(fVertex);
-    pcf->SetEtaRange(etamin, etamax);
+    pcf->SetEventVertex(collision.posZ());
     pcf->FillQA(tracks);
     qvecs.Calculate(tracks, etamin, etamax);
     pcf->SetJQVectors(&qvecs);
     pcf->UserExec("");
+  }
+
+  template <class CollisionT, class POITrackT, class REFTrackT>
+  void analyze(CollisionT const& collision, POITrackT const& poiTracks, REFTrackT const& refTracks)
+  {
+    pcf2Prong->Init();
+    pcf2Prong->SetEventCentrality(collision.multiplicity());
+    pcf2Prong->SetEventVertex(collision.posZ());
+    pcf2Prong->FillQA(poiTracks);
+    qvecs.Calculate(poiTracks, etamin, etamax);
+    qvecsRef.Calculate(refTracks, etamin, etamax);
+    pcf2Prong->SetJQVectors(&qvecs, &qvecsRef);
+    pcf2Prong->UserExec("");
   }
 
   void processJDerived(aod::JCollision const& collision, soa::Filtered<aod::JTracks> const& tracks)
@@ -103,8 +127,16 @@ struct jflucAnalysisTask {
   }
   PROCESS_SWITCH(jflucAnalysisTask, processCFDerivedCorrected, "Process CF derived data with corrections", false);
 
+  void processCF2ProngDerived(aod::CFCollision const& collision, soa::Filtered<aod::CFTracks> const& tracks, soa::Filtered<aod::CF2ProngTracks> const& p2tracks)
+  {
+    analyze(collision, p2tracks, tracks);
+  }
+  PROCESS_SWITCH(jflucAnalysisTask, processCF2ProngDerived, "Process CF derived data with 2-prongs as POI and charged particles as REF.", false);
+
   JFFlucAnalysis::JQVectorsT qvecs;
+  JFFlucAnalysis::JQVectorsT qvecsRef;
   JFFlucAnalysisO2Hist* pcf;
+  JFFlucAnalysisO2Hist* pcf2Prong;
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
