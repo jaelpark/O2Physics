@@ -97,13 +97,12 @@ struct FilterCF {
                            collision.selection_bit(o2::aod::evsel::kNoSameBunchPileup))) {
       return false;
     }
-    if (cfgTrigger == 0) {
-      return true;
-    } else if (cfgTrigger == 7) {
+    if (cfgTrigger == 7) {
       return collision.alias_bit(kINT7) && collision.sel7();
     } else if (cfgTrigger == 8) {
       return collision.sel8();
     }
+    return true;
   }
 
   template <typename TTrack>
