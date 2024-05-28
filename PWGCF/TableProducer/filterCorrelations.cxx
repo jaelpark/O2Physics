@@ -60,6 +60,7 @@ struct FilterCF {
   O2_DEFINE_CONFIGURABLE(cfgCutMCEta, float, 0.8f, "Eta range for particles")
   O2_DEFINE_CONFIGURABLE(cfgVerbosity, int, 1, "Verbosity level (0 = major, 1 = per collision)")
   O2_DEFINE_CONFIGURABLE(cfgTrigger, int, 7, "Trigger choice: (0 = none, 7 = sel7, 8 = sel8)")
+  O2_DEFINE_CONFIGURABLE(cfgStdPbPbSel, int, 0, "Enable standard Pb-Pb selections (0 = off, 1 = kIsGoodZvtxFT0vsPV|kNoSameBunchPileup)")
   O2_DEFINE_CONFIGURABLE(cfgCollisionFlags, uint16_t, aod::collision::CollisionFlagsRun2::Run2VertexerTracks, "Request collision flags if non-zero (0 = off, 1 = Run2VertexerTracks)")
   O2_DEFINE_CONFIGURABLE(cfgTransientTables, bool, false, "Output transient tables for collision and track IDs")
   O2_DEFINE_CONFIGURABLE(cfgTrackSelection, int, 0, "Type of track selection (0 = Run 2/3 without systematics | 1 = Run 3 with systematics)")
@@ -92,6 +93,10 @@ struct FilterCF {
   template <typename TCollision>
   bool keepCollision(TCollision& collision)
   {
+    if (cfgStdPbPbSel && !(collision.selection_bit(o2::aod::evsel::kIsGoodZvtxFT0vsPV) &&
+                           collision.selection_bit(o2::aod::evsel::kNoSameBunchPileup))) {
+      return false;
+    }
     if (cfgTrigger == 0) {
       return true;
     } else if (cfgTrigger == 7) {
@@ -99,7 +104,6 @@ struct FilterCF {
     } else if (cfgTrigger == 8) {
       return collision.sel8();
     }
-    return false;
   }
 
   template <typename TTrack>
