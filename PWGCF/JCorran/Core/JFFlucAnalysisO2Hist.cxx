@@ -18,7 +18,7 @@
 
 using namespace o2;
 
-JFFlucAnalysisO2Hist::JFFlucAnalysisO2Hist(HistogramRegistry& registry, AxisSpec& axisMultiplicity, const TString& folder) : JFFlucAnalysis()
+JFFlucAnalysisO2Hist::JFFlucAnalysisO2Hist(HistogramRegistry& registry, AxisSpec& axisMultiplicity, AxisSpec& phiAxis, AxisSpec& etaAxis, AxisSpec& zvtAxis, const TString& folder) : JFFlucAnalysis()
 {
 
   ph1[HIST_TH1_CENTRALITY] = std::get<std::shared_ptr<TH1>>(registry.add(Form("%s/h_cent", folder.Data()), "multiplicity/centrality", {HistType::kTH1F, {axisMultiplicity}})).get();
@@ -28,10 +28,8 @@ JFFlucAnalysisO2Hist::JFFlucAnalysisO2Hist(HistogramRegistry& registry, AxisSpec
   // TODO: these shall be configurable
   std::vector<double> ptBinning = {0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 10.0};
   AxisSpec ptAxis = {ptBinning, "#it{p}_{T} (GeV/c)"};
-  AxisSpec phiAxis = {50, 0.0, o2::constants::math::TwoPI, "#phi"};
-  AxisSpec etaAxis = {40, -2.0, 2.0, "#eta"};
-  AxisSpec zvtAxis = {20, -10.0, 10.0, "zvtx"};
-  pht[HIST_THN_PHIETAZ] = std::get<std::shared_ptr<THn>>(registry.add(Form("%s/h_phietaz", folder.Data()), "multiplicity/centrality, phi, eta, z", {HistType::kTHnF, {axisMultiplicity, phiAxis, etaAxis, zvtAxis}})).get();
+  AxisSpec typeAxis = {2, -0.5, 1.5, "type"};
+  pht[HIST_THN_PHIETAZ] = std::get<std::shared_ptr<THn>>(registry.add(Form("%s/h_phietaz", folder.Data()), "multiplicity/centrality, type, phi, eta, z", {HistType::kTHnF, {axisMultiplicity, typeAxis, phiAxis, etaAxis, zvtAxis}})).get();
   pht[HIST_THN_PTETA] = std::get<std::shared_ptr<THn>>(registry.add(Form("%s/h_pteta", folder.Data()), "(corrected) multiplicity/centrality, pT, eta", {HistType::kTHnF, {axisMultiplicity, ptAxis, etaAxis}})).get();
   pht[HIST_THN_PHIETA] = std::get<std::shared_ptr<THn>>(registry.add(Form("%s/h_phieta", folder.Data()), "(corrected) multiplicity/centrality, phi, eta", {HistType::kTHnF, {axisMultiplicity, phiAxis, etaAxis}})).get();
   AxisSpec hAxis = {kNH, -0.5, static_cast<double>(kNH - 1) + 0.5, "#it{n}"};
@@ -41,7 +39,7 @@ JFFlucAnalysisO2Hist::JFFlucAnalysisO2Hist(HistogramRegistry& registry, AxisSpec
   pht[HIST_THN_SC_with_QC_2corr] = std::get<std::shared_ptr<THn>>(registry.add(Form("%s/h_SC_with_QC_2corr", folder.Data()), "SC_with_QC_2corr", {HistType::kTHnF, {axisMultiplicity, hAxis, {1024, -1.5, 1.5, "correlation"}}})).get();
   pht[HIST_THN_SC_with_QC_2corr_gap] = std::get<std::shared_ptr<THn>>(registry.add(Form("%s/h_SC_with_QC_2corr_gap", folder.Data()), "SC_with_QC_2corr_gap", {HistType::kTHnF, {axisMultiplicity, hAxis, {1024, -1.5, 1.5, "correlation"}}})).get();
   for (UInt_t i = HIST_THN_V4V2star_2; i < HIST_THN_COUNT; ++i)
-    pht[i] = std::get<std::shared_ptr<THn>>(registry.add(Form("h_corrC%02u", i - HIST_THN_V4V2star_2), "correlator", {HistType::kTHnF, {axisMultiplicity, {1024, -3.0, 3.0, "correlation"}}})).get();
+    pht[i] = std::get<std::shared_ptr<THn>>(registry.add(Form("%s/h_corrC%02u", folder.Data(), i - HIST_THN_V4V2star_2), "correlator", {HistType::kTHnF, {axisMultiplicity, {1024, -3.0, 3.0, "correlation"}}})).get();
   for (UInt_t i = 0; i < HIST_THN_COUNT; ++i)
     pht[i]->Sumw2();
 

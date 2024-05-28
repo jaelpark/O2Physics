@@ -138,9 +138,11 @@ class JFFlucAnalysis : public TNamed
   using hasWeightNUA = decltype(std::declval<T&>().weightNUA());
   template <class T>
   using hasWeightEff = decltype(std::declval<T&>().weightEff());
+  template <class T>
+  using hasType = decltype(std::declval<T&>().particleType());
 
   template <class JInputClass>
-  inline void FillQA(JInputClass& inputInst)
+  inline void FillQA(JInputClass& inputInst, UInt_t type = 0)
   {
     ph1[HIST_TH1_CENTRALITY]->Fill(fCent);
     ph1[HIST_TH1_IMPACTPARAM]->Fill(fImpactParameter);
@@ -154,7 +156,9 @@ class JFFlucAnalysis : public TNamed
       if constexpr (std::experimental::is_detected<hasWeightNUA, const JInputClassIter>::value)
         corrInv /= track.weightNUA();
       pht[HIST_THN_PHIETA]->Fill(fCent, track.phi(), track.eta(), corrInv);
-      pht[HIST_THN_PHIETAZ]->Fill(fCent, track.phi(), track.eta(), fVertex, corrInv);
+      if constexpr (std::experimental::is_detected<hasType, const JInputClassIter>::value)
+        type = track.particleType();
+      pht[HIST_THN_PHIETAZ]->Fill(fCent, static_cast<Double_t>(type), track.phi(), track.eta(), fVertex, corrInv);
     }
 
     ph1[HIST_TH1_ZVERTEX]->Fill(fVertex);

@@ -134,7 +134,7 @@ void JFFlucAnalysis::UserExec(Option_t* popt)
     if ((subeventMask & (1 << i)) == 0)
       continue;
     decltype(pqvecs->QvectorQCgap[i])& Qa = pqvecs->QvectorQCgap[i];
-    decltype(pqvecs->QvectorQCgap[i - 1])& Qb = (pqvecsRef ? pqvecsRef : pqvecs)->QvectorQCgap[i - 1]; // A & B subevents from POI and REF, when given
+    decltype(pqvecs->QvectorQCgap[1 - i])& Qb = (pqvecsRef ? pqvecsRef : pqvecs)->QvectorQCgap[1 - i]; // A & B subevents from POI and REF, when given
     Double_t ref_2p = TwoGap(Qa, Qb, 0, 0).Re();
     Double_t ref_3p = ThreeGap(Qa, Qb, 0, 0, 0).Re();
     Double_t ref_4p = FourGap22(Qa, Qb, 0, 0, 0, 0).Re();
