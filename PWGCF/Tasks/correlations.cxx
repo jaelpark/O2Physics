@@ -15,8 +15,8 @@
 #include <TDirectory.h>
 #include <THn.h>
 #include <TFile.h>
+#include <TDatabasePDG.h>
 
-#include "Framework/runDataProcessing.h"
 #include "Framework/AnalysisTask.h"
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/ASoAHelpers.h"
@@ -25,6 +25,8 @@
 #include "Framework/HistogramRegistry.h"
 #include "Framework/RunningWorkflowInfo.h"
 #include "CommonConstants/MathConstants.h"
+#include "Framework/O2DatabasePDGPlugin.h"
+#include "Framework/ConfigParamSpec.h"
 
 #include "Common/DataModel/EventSelection.h"
 #include "Common/DataModel/TrackSelectionTables.h"
@@ -39,6 +41,14 @@ using namespace o2;
 using namespace o2::framework;
 using namespace o2::framework::expressions;
 using namespace constants::math;
+
+void customize(std::vector<ConfigParamSpec>& workflowOptions)
+{
+  ConfigParamSpec optionExtendMCSigns{"extendMCSigns", VariantType::Bool, false, {"Extend McParticles table with signs from PDG database. Required for MCGen processes."}};
+  workflowOptions.push_back(optionExtendMCSigns);
+}
+
+#include "Framework/runDataProcessing.h"
 
 #define O2_DEFINE_CONFIGURABLE(NAME, TYPE, DEFAULT, HELP) Configurable<TYPE> NAME{#NAME, DEFAULT, HELP};
 
@@ -55,8 +65,29 @@ using namespace constants::math;
 
 static constexpr float cfgPairCutDefaults[1][5] = {{-1, -1, -1, -1, -1}};
 
+// use cfmcparticle::sign
+namespace o2::aod
+{
+DECLARE_SOA_TABLE(CFMcSigns, "AOD", "CFMCSIGN", //! Signs
+                  cfmcparticle::Sign);
+}
+
+struct McParticleSign {
+  Service<o2::framework::O2DatabasePDG> pdg;
+  Produces<aod::CFMcSigns> output;
+
+  void process(aod::McParticles const& mcParticles)
+  {
+    for (const auto& particle : mcParticles) {
+      TParticlePDG* pdgParticle = pdg->GetParticle(particle.pdgCode());
+      output(pdgParticle ? pdgParticle->Charge() : 0);
+    }
+  }
+};
+
 struct CorrelationTask {
   SliceCache cache;
+  Service<o2::framework::O2DatabasePDG> pdg;
 
   // Configuration
   O2_DEFINE_CONFIGURABLE(cfgCutVertex, float, 7.0f, "Accepted z-vertex range")
@@ -112,6 +143,7 @@ struct CorrelationTask {
   // MC filters
   Filter cfMCCollisionFilter = nabs(aod::mccollision::posZ) < cfgCutVertex;
   Filter cfMCParticleFilter = (nabs(aod::cfmcparticle::eta) < cfgCutEta) && (aod::cfmcparticle::pt > cfgCutPt) && (aod::cfmcparticle::sign != 0);
+  Filter mcParticleFilter = (nabs(aod::mcparticle::eta) < cfgCutEta) && (aod::mcparticle::pt > cfgCutPt); // && (aod::mcparticle::isPhysicalPrimary == true);
 
   // HF filters
   Filter track2pFilter = (nabs(aod::cf2prongtrack::eta) < cfgCutEta) && (aod::cf2prongtrack::pt > cfgCutPt);
@@ -875,10 +907,37 @@ struct CorrelationTask {
     }
   }
   PROCESS_SWITCH(CorrelationTask, processMCMixedDerived, "Process MC mixed events on derived data", false);
+
+  void processMCSameGen(aod::McCollisions::iterator const& collision, soa::Filtered<soa::Join<aod::McParticles, aod::CFMcSigns>> const& mcParticles)
+  {
+    BinningTypeDerived configurableBinningDerived{{axisVertex, axisMultiplicity}, true}; // true is for 'ignore overflows' (true by default). Underflows and overflows will have bin -1.
+    if (cfgVerbosity > 0) {
+      LOGF(info, "processSameMCGen: Particles for collision: %d | Vertex: %.1f", mcParticles.size(), collision.posZ());
+    }
+
+    float multiplicity = 0.0f;
+    for (const auto& particle : mcParticles) {
+      if (particle.isPhysicalPrimary() && particle.sign() != 0)
+        multiplicity += 1.0f;
+    }
+
+    int bin = configurableBinningDerived.getBin({collision.posZ(), multiplicity});
+    registry.fill(HIST("eventcount_same"), bin);
+    fillQA(collision, multiplicity, mcParticles);
+
+    same->fillEvent(multiplicity, CorrelationContainer::kCFStepReconstructed);
+    fillCorrelations<CorrelationContainer::kCFStepReconstructed>(same, mcParticles, mcParticles, multiplicity, collision.posZ(), 0, 1.0f);
+  }
+  PROCESS_SWITCH(CorrelationTask, processMCSameGen, "Process same event on MC generated data", false);
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
-  return WorkflowSpec{
-    adaptAnalysisTask<CorrelationTask>(cfgc)};
+  if (cfgc.options().get<bool>("extendMCSigns")) {
+    return WorkflowSpec{
+      adaptAnalysisTask<McParticleSign>(cfgc),
+      adaptAnalysisTask<CorrelationTask>(cfgc)};
+  } else {
+    return WorkflowSpec{adaptAnalysisTask<CorrelationTask>(cfgc)};
+  }
 }
