@@ -794,6 +794,8 @@ struct CorrelationTask {
       }
     }
 
+    fillQA(mcCollision, multiplicity, mcParticles);
+
     same->fillEvent(multiplicity, CorrelationContainer::kCFStepAll);
     fillCorrelations<CorrelationContainer::kCFStepAll>(same, mcParticles, mcParticles, multiplicity, mcCollision.posZ(), 0, 1.0f);
 
